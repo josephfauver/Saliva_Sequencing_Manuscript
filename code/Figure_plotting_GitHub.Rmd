@@ -1,0 +1,176 @@
+---
+title: "Sequencing SARS-CoV-2 Genomes from Saliva - Alpert et al."
+output: html_document
+---
+
+# Import libraries
+```{r}
+
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(seqinr)
+library(stringr)
+library(reshape2)
+library(ggExtra)
+
+```
+
+#  Figure 2A and B - Get coverage >20x from fasta file (%N)
+```{r}
+
+# Figure 2A ---------------------------------------------------------------------
+
+metadata <- read.csv("G:/My Drive/_grubaugh/saliva seq/testing/Data S1_B.csv", header = T)
+
+
+files = list.files("G:/My Drive/_grubaugh/saliva seq/downsampled_to_match_pair/fastas/", full.names = T)
+for (i in 1:length(files)){
+  x <- read.fasta(files[i])
+  cov <- 1 - ( sum(x[[1]] == "n") / length(x[[1]])) # count number of N's in fasta sequence
+  name <- strsplit(files[i], "fastas/")[[1]][2]
+  name <- strsplit(name, ".consensus.fasta")[[1]][1]
+  if (i == 1){
+    df <- data.frame(sample = name, coverage = cov)
+  } else {
+    df <- bind_rows(df, data.frame( sample = name, coverage = cov))
+  }
+}
+
+df$type <- rep(NA)
+df$sample_number <- rep(NA)
+df$category <- rep(NA)
+df$Update <- rep(NA)
+df$ct <- rep(NA)
+
+df[ grep("SL", df$sample), c("type")] <- "SL"
+df[ grep("NP", df$sample), c("type")] <- "NP"
+df$sample_number <- substr(df$sample, 1, 2)
+df[ grep("_matched", df$sample), c("category")] <- "matched"
+df[ grep("_original", df$sample), c("category")] <- "matched"
+
+df$Update <- sapply(strsplit(df$sample, "_"), getElement , 1)
+
+
+# add Ct values to df 
+metadata$Figure.1.ID <- gsub("-",  "", metadata$Figure.1.ID)
+for (i in 1:nrow(df)){
+  name <- df$Update[i]
+  ct <- metadata$Ct.value..N1.[metadata$Figure.1.ID == name]
+  df$ct[i] <- ct
+}
+df$ct <- as.numeric(df$ct)
+
+
+ggplot(df[ df$category == "matched", ], aes(x = ct, y = coverage*100))+
+  geom_point(aes( color = type), size = 3)+
+  geom_line(aes(group = sample_number), color = "grey")+
+  xlab("Ct value (N1)")+ ylab("% genome >20x coverage")+
+  theme_bw()+ggtitle("Normalized to match read number of lower sample")+
+  coord_cartesian(ylim=c(0,100))
+
+
+# Figure 2B ---------------------------------------------------------------------
+
+doc <- read.csv("G:/My Drive/_grubaugh/saliva seq/testing/Data S1_C.csv", header = T)
+
+doc[,8] <- as.numeric(sub("%", "", doc[,8]))
+doc[,9] <- as.numeric(sub("%", "", doc[,9]))
+doc[,10] <- as.numeric(sub("%", "", doc[,10]))
+doc[,11] <- as.numeric(sub("%", "", doc[,11]))
+doc[,12] <- as.numeric(sub("%", "", doc[,12]))
+
+dfplot <- melt(doc[, c("Figure.1.ID", "Sample.type", "Ct.value..N1.", "Coverage..20x", 
+                       "Coverage..10x", "Coverage..5x", "Coverage..1x")], 
+               id=c("Figure.1.ID", "Sample.type", "Ct.value..N1."))
+
+
+ggplot(dfplot, aes(x = Ct.value..N1., y = value, color = Sample.type, alpha = variable))+
+  geom_point(size = 3)+
+  geom_line(aes(group = Figure.1.ID), color = "grey", size = 1)+
+  coord_cartesian(ylim=c(0,100))+
+  theme_bw()
+
+```
+
+# Figure 1
+```{r}
+
+# Fig 1A ---------------------------------------------------
+data <- read.csv("G:/My Drive/_grubaugh/saliva seq/testing/Data S1_A.csv", header = T)
+
+ggplot(data, aes(x = Ct.value..N1., y = X..genome.coverage...20x))+
+  geom_point(aes(color = Sample.type), size = 2)+
+  geom_hline(yintercept = 80)+
+  theme_classic()+ xlab("Ct Value N1")+ylab("% genome >20x coverage")
+
+# N's
+nrow( data[data$Sample.type == "SL" & !is.na(data$X..genome.coverage...20x), ] ) # 67
+nrow( data[data$Sample.type == "NP" & !is.na(data$X..genome.coverage...20x), ] ) # 176
+
+# mean readcount
+mean(data[data$Sample.type == "SL" & !is.na(data$X..genome.coverage...20x), c("Readcount")], na.rm = T) # 187280.9
+mean(data[data$Sample.type == "NP" & !is.na(data$X..genome.coverage...20x), c("Readcount")], na.rm = T) # 275965
+
+# Fig 1B ---------------------------------------------------
+ggplot(data, aes(x = Readcount, y = X..genome.coverage...20x))+
+  geom_point(aes(color = Sample.type), size = 2 )+
+  theme_classic()+
+  geom_vline( xintercept = 200000)+
+  geom_hline(yintercept = 80)+
+  xlab("Reads per sample")+ ylab("% Coverage > 20x")
+
+nrow( data[data$Sample.type == "SL" & !is.na(data$X..genome.coverage...20x) & !is.na(data$Readcount), ] ) # 53
+nrow( data[data$Sample.type == "NP" & !is.na(data$X..genome.coverage...20x)& !is.na(data$Readcount), ] ) # 122
+
+mean( data[data$Sample.type == "SL" & !is.na(data$X..genome.coverage...20x) & !is.na(data$Readcount),
+           c("Readcount")], na.rm = T) # 181709.5
+mean(data[data$Sample.type == "NP" & !is.na(data$X..genome.coverage...20x) & !is.na(data$Readcount),
+          c("Readcount")], na.rm = T) # 275965
+
+```
+
+
+# Figure 3
+```{r}
+
+# Figure 3A ------------------------------------------------------------------
+
+data <- read.csv("G:/My Drive/_grubaugh/saliva seq/testing/Data S1_D.csv", header = T)
+
+data$Coverage..20x <- as.numeric(sub( "%", "", data$Coverage..20x))
+data$ID <- substr(data$Figure.2.ID, 0,2)
+
+ggplot(data, aes(x = Ct.value..N1., y = Coverage..20x))+
+  geom_point(aes(color = Sample.type), size = 2)+
+  geom_line(aes(group = ID), color = "grey")+
+  # geom_text(aes(label = ID))+
+  theme_classic()+ xlab("Ct Value N1")+ylab("% genome >20x coverage")
+  coord_cartesian(ylim=c(0,100))
+
+  
+  
+# Figure 3B ---------------------------------------------------------------------
+  
+data[,9] <- as.numeric(sub("%", "", data[,9]))
+data[,10] <- as.numeric(sub("%", "", data[,10]))
+data[,11] <- as.numeric(sub("%", "", data[,11]))
+data[,12] <- as.numeric(sub("%", "", data[,12]))
+data[,13] <- as.numeric(sub("%", "", data[,13]))  
+  
+df <- melt(data[, c("Figure.2.ID", "ID", "Ct.value..N1.", "Sample.type",
+                    "Coverage..10x", "Coverage..5x", "Coverage..1x", "Coverage..20x")],
+           id=c("Figure.2.ID", "ID", "Sample.type", "Ct.value..N1."))
+
+ggplot(df, aes(x = Ct.value..N1., y = value, color = Sample.type, alpha = variable))+
+  geom_point(size = 3)+
+  geom_line(aes(group = Figure.2.ID), color = "grey", size = 1)+
+  theme_bw()
+
+```
+
+
+
+
+
+
